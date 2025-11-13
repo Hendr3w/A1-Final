@@ -8,7 +8,7 @@ Sistema de livraria feito em python.
 
 - static - armazena arquivos estáticos, ou seja, arquivos que não mudam dinamicamente no servidor 
 - templates - arquivos HTML usados como modelos para renderizar as páginas
-- meu_sistema_livraria - armazenamento e gerenciamento dos dados da aplicação
+- meu_sistema_livraria - armazenamento dos dados da aplicação
 
 ## Setup
 
