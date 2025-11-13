@@ -15,9 +15,6 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
-# ==========================================================
-# CÓDIGO CORE DE LÓGICA DE NEGÓCIO
-# ==========================================================
 ROOT = Path.cwd() / "meu_sistema_livraria"
 DATA_DIR = ROOT / "data"
 BACKUP_DIR = ROOT / "backups"
