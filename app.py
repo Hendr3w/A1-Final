@@ -1,118 +1,406 @@
-# app.py (Atualizado)
+import sqlite3
+from pathlib import Path
+import os
+import shutil
+import csv
+from datetime import datetime
+from io import StringIO, BytesIO # Certifique-se que BytesIO está importado
 
-from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for
-from config import init_db
-from crud import listar_livros, add_livro, update_preco, delete_livro, search_autor
-from data_io import export_csv_to_memory, import_csv_file # Importa I/O de dados
-from reporting import generate_html_report, generate_pdf_report # Importa geração de relatórios
-import io
+from flask import Flask, request, jsonify, send_file, render_template
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+# Importações para ReportLab (Geração de PDF)
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
 
+# ==========================================================
+# CÓDIGO CORE DE LÓGICA DE NEGÓCIO
+# ==========================================================
+ROOT = Path.cwd() / "meu_sistema_livraria"
+DATA_DIR = ROOT / "data"
+BACKUP_DIR = ROOT / "backups"
+EXPORT_DIR = ROOT / "exports"
+DB_FILE = DATA_DIR / "livraria.db"
+BACKUP_PREFIX = "backup_livraria_"
+MAX_BACKUPS_TO_KEEP = 5
+
+def ensure_directories():
+    for p in (ROOT, DATA_DIR, BACKUP_DIR, EXPORT_DIR):
+        os.makedirs(p, exist_ok=True)
+
+def get_connection():
+    if not DB_FILE.exists():
+        init_db()
+    return sqlite3.connect(str(DB_FILE))
+
+def init_db():
+    ensure_directories()
+    with sqlite3.connect(str(DB_FILE)) as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS livros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo TEXT NOT NULL,
+                autor TEXT NOT NULL,
+                ano_publicacao INTEGER,
+                preco REAL
+            )
+        """)
+        conn.commit()
+
+def backup_db(reason="manual"):
+    ensure_directories()
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_name = f"{BACKUP_PREFIX}{timestamp}.db"
+    backup_path = BACKUP_DIR / backup_name
+    
+    try:
+        shutil.copy2(DB_FILE, backup_path)
+    except FileNotFoundError:
+        pass
+        
+    prune_old_backups()
+    return backup_path
+
+def prune_old_backups():
+    backups = sorted(BACKUP_DIR.glob(f"{BACKUP_PREFIX}*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in backups[MAX_BACKUPS_TO_KEEP:]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+
+def validar_ano(ano_str):
+    try:
+        if not ano_str: return None
+        ano = int(ano_str)
+        if 1000 <= ano <= datetime.now().year + 1:
+            return ano
+    except:
+        pass
+    return None
 
 def validar_preco(preco_str):
+    """Valida e converte a string de preço para float, aceitando , ou ."""
     try:
-        preco = float(preco_str)
+        if not preco_str: return None
+        # Substitui a vírgula por ponto para o float() funcionar
+        preco = float(str(preco_str).strip().replace(',', '.')) 
         if preco >= 0:
             return preco
     except:
         pass
     return None
 
+def adicionar_livro(titulo, autor, ano_publicacao, preco):
+    backup_db(reason="adicionar")
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
+                    (titulo.strip(), autor.strip(), ano_publicacao, preco))
+        conn.commit()
+        return cur.lastrowid
 
+def listar_livros():
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, titulo, autor, ano_publicacao, preco FROM livros ORDER BY id")
+        return [dict(row) for row in cur.fetchall()]
 
+def atualizar_preco_livro(livro_id, novo_preco):
+    backup_db(reason="atualizar_preco")
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE livros SET preco = ? WHERE id = ?", (novo_preco, livro_id))
+        conn.commit()
+        return cur.rowcount > 0
+
+def remover_livro(livro_id):
+    backup_db(reason="remover")
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM livros WHERE id = ?", (livro_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+def buscar_por_autor(autor_query):
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        like = f"%{autor_query.strip()}%"
+        cur.execute("SELECT id, titulo, autor, ano_publicacao, preco FROM livros WHERE autor LIKE ? ORDER BY id", (like,))
+        return [dict(row) for row in cur.fetchall()]
+
+def exportar_para_csv():
+    """Exporta os dados da tabela para CSV em memória e retorna um stream binário (BytesIO)."""
+    livros = listar_livros()
+    si = StringIO() # Usamos StringIO para escrever o CSV como texto
+    writer = csv.writer(si)
+    writer.writerow(["id", "titulo", "autor", "ano_publicacao", "preco"])
+    for livro in livros:
+        # Garante que o preço saia com ponto decimal para importação universal
+        preco_csv = f"{livro['preco']:.2f}" if (livro['preco'] is not None) else ""
+        writer.writerow([livro['id'], livro['titulo'], livro['autor'], livro['ano_publicacao'] or "", preco_csv])
+    si.seek(0)
+    
+    # CONVERSÃO ESSENCIAL: Converte o conteúdo de texto (StringIO) para binário (BytesIO)
+    csv_data_bytes = si.getvalue().encode('utf-8')
+    buffer = BytesIO(csv_data_bytes)
+    buffer.seek(0)
+    
+    return buffer # Retorna o objeto BytesIO (BINÁRIO)
+
+def importar_de_csv_from_memory(file_storage):
+    inserted = 0
+    stream = file_storage.stream.read().decode("utf-8")
+    reader = csv.DictReader(StringIO(stream))
+    rows = list(reader)
+    if not rows:
+        return 0
+    backup_db(reason="importar_csv")
+    with get_connection() as conn:
+        cur = conn.cursor()
+        for r in rows:
+            titulo = r.get("titulo") or r.get("title") or ""
+            autor = r.get("autor") or r.get("author") or ""
+            ano_raw = r.get("ano_publicacao") or r.get("Ano") or r.get("year") or ""
+            preco_raw = r.get("preco") or r.get("Preço") or r.get("price") or ""
+            
+            # Validação usa a função que aceita vírgula ou ponto
+            ano = validar_ano(ano_raw.strip())
+            preco = validar_preco(preco_raw.strip())
+            
+            cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
+                        (titulo.strip(), autor.strip(), ano, preco))
+            inserted += 1
+        conn.commit()
+    return inserted
+
+def gerar_relatorio_html():
+    """
+    Gera o relatório HTML em memória.
+    CORREÇÃO: Converte o conteúdo de texto para BytesIO antes de retornar.
+    """
+    livros = listar_livros()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    html_content = [
+        "<!doctype html>",
+        "<html><head><meta charset='utf-8'><title>Relatório de Livros</title>",
+        "<style>body{font-family:Arial,sans-serif;}table{border-collapse:collapse;width:80%;margin:20px auto;}th,td{border:1px solid #ccc;padding:10px;text-align:left;}thead{background-color:#003366;color:white;}</style>",
+        "</head><body>",
+        f"<h1>Relatório de Livros - Livraria Aoros</h1><p style='text-align:center;'>Gerado em {now}</p>",
+        "<table><thead><tr><th style='width:5%; text-align:center;'>ID</th><th style='width:35%'>Título</th><th style='width:30%'>Autor</th><th style='width:10%; text-align:center;'>Ano</th><th style='width:20%; text-align:right;'>Preço</th></tr></thead><tbody>"
+    ]
+    total_livros = len(livros)
+    
+    for livro in livros:
+        # Formata o preço no padrão BRL para o relatório HTML
+        preco_str = f"R$ {livro['preco']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if (livro['preco'] is not None) else 'N/A'
+        html_content.append(f"<tr><td style='text-align:center;'>{livro['id']}</td><td>{livro['titulo']}</td><td>{livro['autor']}</td><td style='text-align:center;'>{livro['ano_publicacao'] or ''}</td><td style='text-align:right;'>{preco_str}</td></tr>")
+    
+    html_content.append("</tbody></table>")
+    html_content.append(f"<p style='text-align:center; margin-top: 20px;'>Total de Registros: {total_livros}</p>")
+    html_content.append("</body></html>")
+    
+    final_html = "\n".join(html_content)
+    
+    # CONVERSÃO PARA BINÁRIO:
+    html_data_bytes = final_html.encode('utf-8')
+    buffer = BytesIO(html_data_bytes)
+    buffer.seek(0)
+    return buffer # Retorna o objeto BytesIO (BINÁRIO)
+
+def gerar_relatorio_pdf():
+    livros = listar_livros()
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    # Função para formatar o preço em BRL para o PDF
+    def formatar_preco_brl(preco):
+        if preco is not None:
+            # Garante a formatação BRL correta no PDF
+            return "R$ " + f"{preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return 'N/A'
+
+    # 1. Título
+    elements.append(Paragraph("Relatório de Livros da Livraria Aoros", styles['h1']))
+    elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+    elements.append(Spacer(1, 0.4 * inch))
+
+    # 2. Tabela de Dados
+    data = [["ID", "Título", "Autor", "Ano", "Preço"]]
+    
+    for livro in livros:
+        preco_str = formatar_preco_brl(livro['preco'])
+        
+        data.append([
+            str(livro['id']), 
+            str(livro['titulo']), 
+            str(livro['autor']), 
+            str(livro['ano_publicacao'] or ''), 
+            preco_str
+        ])
+        
+    table = Table(data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 0.7*inch, 1*inch])
+    
+    # 3. Estilo da Tabela
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')), 
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (0, 1), (0, -1), 'CENTER'), # Alinha coluna ID ao centro
+        ('ALIGN', (3, 1), (3, -1), 'CENTER'), # Alinha coluna Ano ao centro
+        ('ALIGN', (4, 1), (4, -1), 'RIGHT'), # Alinha coluna Preço à direita
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#cccccc')),
+    ])
+    
+    table.setStyle(style)
+    elements.append(table)
+    
+    # 4. Total de Registros
+    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(Paragraph(f"Total de Livros Cadastrados: {len(livros)}", styles['h3']))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+# Inicialização do banco de dados na inicialização do Flask
+init_db()
+
+# ==========================================================
+# APLICAÇÃO FLASK E ROTAS DA API
+# ==========================================================
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
 @app.route("/")
 def index():
-    init_db()
-    return render_template("index.html")
+    return render_template('index.html')
 
-@app.route("/api/export/csv", methods=["GET"])
-def api_export_csv():
-    csv_data = export_csv_to_memory()
-    buffer = io.BytesIO(csv_data)
-    return send_file(buffer, mimetype="text/csv", as_attachment=True, download_name="livros_exportados.csv")
+@app.route("/api/books", methods=["GET", "POST"])
+def api_books():
+    if request.method == "GET":
+        livros = listar_livros()
+        return jsonify(livros)
+        
+    elif request.method == "POST":
+        data = request.json
+        titulo = data.get("titulo")
+        autor = data.get("autor")
+        ano_raw = data.get("ano_publicacao", "")
+        preco_raw = data.get("preco", "")
 
-@app.route("/api/books", methods=["GET"])
-def api_list_books():
-    from crud import listar_livros
-    books = listar_livros()
-    books_dict = []
-    for b in books:
-        books_dict.append({
-            "id": b[0],
-            "book_id": b[1],
-            "isbn": b[2],
-            "title": b[3],
-            "author": b[4],
-            "genre": b[5],
-            "publisher": b[6],
-            "ano_publicacao": b[7],
-            "preco": b[8],
-            "estoque": b[9]
-        })
-    return jsonify(books_dict)
+        if not titulo or not autor:
+            return jsonify({"error": "Título e Autor são obrigatórios"}), 400
 
-@app.route("/api/report/html", methods=["GET"])
-def api_report_html():
-    html_data = generate_html_report()
-    return html_data, 200, {'Content-Type': 'text/html'}
+        ano = validar_ano(ano_raw)
+        if ano_raw and ano is None:
+             return jsonify({"error": "Ano de publicação inválido"}), 400
+        
+        preco = validar_preco(preco_raw)
+        if preco_raw and preco is None:
+             return jsonify({"error": "Preço inválido (deve ser um número não negativo)"}), 400
 
-@app.route("/api/books/<int:book_id>/price", methods=["PUT"])
-def api_update(book_id):
-    data = request.json or {}
-    preco = data.get("preco")
-    preco_val = validar_preco(preco)
-    if preco_val is None:
-        return jsonify({"error":"Preço inválido."}), 400
-    ok = update_preco(book_id, preco_val)
-    if not ok:
-        return jsonify({"error":"Livro não encontrado."}), 404
-    return jsonify({"ok": True})
-
+        try:
+            livro_id = adicionar_livro(titulo, autor, ano, preco)
+            return jsonify({"success": True, "id": livro_id}), 201
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
 @app.route("/api/books/<int:book_id>", methods=["DELETE"])
-def api_delete(book_id):
-    ok = delete_livro(book_id)
-    if not ok:
-        return jsonify({"error":"Livro não encontrado."}), 404
-    return jsonify({"ok": True})
+def api_delete_book(book_id):
+    if remover_livro(book_id):
+        return jsonify({"success": True})
+    return jsonify({"error": "Livro não encontrado"}), 404
 
+@app.route("/api/books/<int:book_id>/price", methods=["PUT"])
+def api_update_price(book_id):
+    data = request.json
+    preco_raw = data.get("preco")
+    novo_preco = validar_preco(preco_raw)
+    
+    if novo_preco is None:
+        return jsonify({"error": "Preço inválido"}), 400
+    
+    if atualizar_preco_livro(book_id, novo_preco):
+        return jsonify({"success": True})
+    return jsonify({"error": "Livro não encontrado"}), 404
 
-@app.route("/api/search", methods=["GET"])
+@app.route("/api/search")
 def api_search():
-    q = request.args.get("q","").strip()
-    rows = search_autor(q) if q else []
-    books = [{"id":r[0],"book_id":r[1],"title":r[2],"author":r[3],"genre":r[4],"publisher":r[5],"isbn":r[6],"ano_publicacao":r[7],"preco":r[8],"estoque":r[9]} for r in rows]
-    return jsonify(books)
+    query = request.args.get("q", "")
+    if not query:
+        return jsonify(listar_livros())
+    
+    resultados = buscar_por_autor(query)
+    return jsonify(resultados)
 
-@app.route("/api/export", methods=["GET"])
+@app.route("/api/export")
 def api_export():
-    data = export_csv_to_memory()
-    return send_file(io.BytesIO(data), as_attachment=True, download_name="livros_exportados.csv", mimetype="text/csv")
+    # exportar_para_csv() já retorna BytesIO (corrigido anteriormente)
+    csv_in_memory = exportar_para_csv() 
+    return send_file(
+        csv_in_memory,
+        mimetype='text/csv',
+        download_name='livros_exportados.csv',
+        as_attachment=True
+    )
 
 @app.route("/api/import", methods=["POST"])
 def api_import():
-    if "file" not in request.files:
-        return jsonify({"error":"Nenhum arquivo enviado."}), 400
-    f = request.files["file"]
-    # Esta função agora trata a importação de 'livros', 'vendas' e 'clientes'
-    inserted = import_csv_file(f.stream, f.filename)
-    return jsonify({"inserted": inserted})
-
-
-
-@app.route("/api/report/pdf", methods=["GET"])
-def api_report_pdf():
+    if 'file' not in request.files:
+        return jsonify({"error": "Nenhum arquivo enviado"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nome do arquivo inválido"}), 400
+    
     try:
-        pdf_data = generate_pdf_report()
-        buffer = io.BytesIO(pdf_data)
-        return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name="relatorio_livros.pdf")
-    except ImportError as e:
+        inserted = importar_de_csv_from_memory(file)
+        return jsonify({"success": True, "inserted": inserted})
+    except Exception as e:
+        return jsonify({"error": f"Erro ao importar CSV: {e}"}), 500
+
+@app.route("/api/backup")
+def api_backup():
+    try:
+        backup_path = backup_db(reason="web_manual")
+        return jsonify({"success": True, "backup": backup_path.name})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/report/html")
+def api_report_html():
+    # gerar_relatorio_html() agora retorna BytesIO (corrigido nesta etapa)
+    html_in_memory = gerar_relatorio_html()
+    
+    return send_file(
+        html_in_memory,
+        mimetype='text/html',
+        download_name='relatorio_livros.html',
+        as_attachment=True
+    )
 
+@app.route("/api/report/pdf")
+def api_report_pdf():
+    # gerar_relatorio_pdf() já retornava BytesIO
+    pdf_buffer = gerar_relatorio_pdf()
+    
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        download_name='relatorio_livros.pdf',
+        as_attachment=True
+    )
 
 if __name__ == "__main__":
-    init_db()
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(debug=True)
