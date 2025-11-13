@@ -50,7 +50,7 @@ def init_db():
         """)
         conn.commit()
 
-def backup_db(reason="manual"):
+def backup_db():
     ensure_directories()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     backup_name = f"{BACKUP_PREFIX}{timestamp}.db"
@@ -95,7 +95,7 @@ def validar_preco(preco_str):
     return None
 
 def adicionar_livro(titulo, autor, ano_publicacao, preco):
-    backup_db(reason="adicionar")
+    backup_db()
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
@@ -111,7 +111,7 @@ def listar_livros():
         return [dict(row) for row in cur.fetchall()]
 
 def atualizar_preco_livro(livro_id, novo_preco):
-    backup_db(reason="atualizar_preco")
+    backup_db()
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("UPDATE livros SET preco = ? WHERE id = ?", (novo_preco, livro_id))
@@ -119,7 +119,7 @@ def atualizar_preco_livro(livro_id, novo_preco):
         return cur.rowcount > 0
 
 def remover_livro(livro_id):
-    backup_db(reason="remover")
+    backup_db()
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("DELETE FROM livros WHERE id = ?", (livro_id,))
@@ -160,7 +160,7 @@ def importar_de_csv_from_memory(file_storage):
     rows = list(reader)
     if not rows:
         return 0
-    backup_db(reason="importar_csv")
+    backup_db()
     with get_connection() as conn:
         cur = conn.cursor()
         for r in rows:
@@ -371,7 +371,7 @@ def api_import():
 @app.route("/api/backup")
 def api_backup():
     try:
-        backup_path = backup_db(reason="web_manual")
+        backup_path = backup_db()
         return jsonify({"success": True, "backup": backup_path.name})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
