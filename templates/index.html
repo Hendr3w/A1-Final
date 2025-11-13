@@ -28,7 +28,7 @@
         </div>
         <div class="col-md-3">
           <input id="autor" class="form-control" placeholder="Autor" required>
-        </div>
+          </div>
         <div class="col-md-2">
           <input id="ano" class="form-control" placeholder="Ano" type="number" min="1000" max="2050">
         </div>
@@ -65,7 +65,7 @@
                 <th>Autor</th>
                 <th class="text-center">Ano</th>
                 <th class="text-end">Preço</th>
-            </tr>
+                <th>Ações</th>             </tr>
           </thead>
           <tbody>
               </tbody>
@@ -118,8 +118,8 @@ function renderTable(books) {
   const tbody = document.querySelector("#tbl-books tbody");
   tbody.innerHTML = "";
   if (books.length === 0) {
-    // colspan ajustado para 5 colunas (ID, Título, Autor, Ano, Preço)
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Nenhum livro cadastrado.</td></tr>';
+    // colspan ajustado para 6 colunas (ID, Título, Autor, Ano, Preço, Ações)
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Nenhum livro cadastrado.</td></tr>';
     return;
   }
   for (const b of books) {
@@ -131,7 +131,10 @@ function renderTable(books) {
       <td>${escapeHtml(b.autor)}</td>
       <td class="text-center">${formatYear(b.ano_publicacao)}</td>
       <td class="text-end fw-bold">${formatPrice(b.preco)}</td>
-      `; // Coluna 'Ações' removida
+      <td class="text-nowrap">
+        <button class="btn btn-sm btn-outline-primary me-1" onclick="promptPrice(${b.id})">Editar Preço</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteBook(${b.id})">Remover</button>
+      </td>`;
     tbody.appendChild(tr);
   }
 }
@@ -139,11 +142,46 @@ function renderTable(books) {
 function escapeHtml(s) { return (s || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
 
 
-// As funções promptPrice e deleteBook foram removidas do código principal
-// pois não são mais chamadas pela interface para simplificar o código.
-// A funcionalidade de edição/deleção existe no backend (app.py) se precisar ser implementada de outra forma.
+// === FUNÇÕES DE AÇÃO RESTAURADAS ===
 
-// === Event Listeners e Funções de Ação ===
+async function promptPrice(id) {
+  const novo = prompt("Novo preço (ex: 45.90 ou 45,90):");
+  if (novo === null || novo.trim() === "") return;
+  // LIMPEZA: Substitui vírgula por ponto para o backend processar como float padrão
+  const preco_formatado = novo.trim().replace(',', '.');
+
+  const res = await fetch(api.updatePrice(id), { 
+    method: "PUT", 
+    headers: { "Content-Type": "application/json" }, 
+    body: JSON.stringify({ preco: preco_formatado }) 
+  });
+
+  if (res.ok) { 
+    showMsg("Preço atualizado com sucesso. Backup automático criado.", "success"); 
+    fetchBooks(); 
+  }
+  else { 
+    const j = await res.json(); 
+    showMsg(j.error || "Erro ao atualizar preço.", "danger"); 
+  }
+}
+
+async function deleteBook(id) {
+  if (!confirm(`Confirmar remoção do livro ID ${id}?`)) return;
+
+  const res = await fetch(api.delete(id), { method: "DELETE" });
+
+  if (res.ok) { 
+    showMsg("Livro removido. Backup automático criado.", "success"); 
+    fetchBooks(); 
+  }
+  else { 
+    const j = await res.json(); 
+    showMsg(j.error || "Erro ao remover livro.", "danger"); 
+  }
+}
+
+// === Event Listeners ===
 
 document.getElementById("form-add").addEventListener("submit", async (e) => {
   e.preventDefault();

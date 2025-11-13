@@ -4,7 +4,7 @@ import os
 import shutil
 import csv
 from datetime import datetime
-from io import StringIO, BytesIO # Certifique-se que BytesIO está importado
+from io import StringIO, BytesIO
 
 from flask import Flask, request, jsonify, send_file, render_template
 
@@ -181,8 +181,7 @@ def importar_de_csv_from_memory(file_storage):
 
 def gerar_relatorio_html():
     """
-    Gera o relatório HTML em memória.
-    CORREÇÃO: Converte o conteúdo de texto para BytesIO antes de retornar.
+    Gera o relatório HTML em memória e converte o conteúdo de texto para BytesIO.
     """
     livros = listar_livros()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -346,7 +345,6 @@ def api_search():
 
 @app.route("/api/export")
 def api_export():
-    # exportar_para_csv() já retorna BytesIO (corrigido anteriormente)
     csv_in_memory = exportar_para_csv() 
     return send_file(
         csv_in_memory,
@@ -380,7 +378,6 @@ def api_backup():
 
 @app.route("/api/report/html")
 def api_report_html():
-    # gerar_relatorio_html() agora retorna BytesIO (corrigido nesta etapa)
     html_in_memory = gerar_relatorio_html()
     
     return send_file(
@@ -392,7 +389,6 @@ def api_report_html():
 
 @app.route("/api/report/pdf")
 def api_report_pdf():
-    # gerar_relatorio_pdf() já retornava BytesIO
     pdf_buffer = gerar_relatorio_pdf()
     
     return send_file(
