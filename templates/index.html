@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Livraria - Web</title>
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='Logo Aoros.png') }}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
@@ -13,7 +12,6 @@
 <body class="bg-light">
 <div class="container py-4">
 
-  <!-- Cabeçalho com logo -->
   <div class="d-flex align-items-center mb-3">
     <img src="{{ url_for('static', filename='Logo Aoros.png') }}" alt="Logo" width="64" height="64" class="me-3 logo-img">
     <div>
@@ -22,23 +20,28 @@
     </div>
   </div>
 
-  <!-- Aqui segue o restante do seu HTML (formulário, botões, tabela, scripts etc.) -->
   <div class="card mb-3">
     <div class="card-body">
       <form id="form-add" class="row g-2">
         <div class="col-md-3">
-          <input id="titulo" class="form-control" placeholder="Título" required>
-        </div>
-        <div class="col-md-3">
-          <input id="autor" class="form-control" placeholder="Autor" required>
+          <input id="title" class="form-control" placeholder="Título" required>
         </div>
         <div class="col-md-2">
+          <input id="author" class="form-control" placeholder="Autor" required>
+        </div>
+        <div class="col-md-2">
+          <input id="book_id" class="form-control" placeholder="Book ID" required>
+        </div>
+        <div class="col-md-2">
+          <input id="isbn" class="form-control" placeholder="ISBN" required>
+        </div>
+        <div class="col-md-1">
           <input id="ano" class="form-control" placeholder="Ano">
         </div>
-        <div class="col-md-2">
+        <div class="col-md-1">
           <input id="preco" class="form-control" placeholder="Preço">
         </div>
-        <div class="col-md-2 d-grid">
+        <div class="col-md-1 d-grid">
           <button class="btn btn-primary" type="submit">Adicionar</button>
         </div>
       </form>
@@ -62,7 +65,7 @@
       <div class="table-responsive">
         <table class="table table-sm table-hover" id="tbl-books">
           <thead class="table-light">
-            <tr><th>ID</th><th>Título</th><th>Autor</th><th>Ano</th><th>Preço</th><th>Ações</th></tr>
+            <tr><th>ID</th><th>Book ID</th><th>Título</th><th>Autor</th><th>Ano</th><th>Preço</th><th>Ações</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -105,9 +108,8 @@ function renderTable(books){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${b.id}</td>
-      <td>${escapeHtml(b.titulo)}</td>
-      <td>${escapeHtml(b.autor)}</td>
-      <td>${b.ano_publicacao || ""}</td>
+      <td>${escapeHtml(b.book_id)}</td>
+      <td>${escapeHtml(b.title)}</td>      <td>${escapeHtml(b.author)}</td>     <td>${b.ano_publicacao || ""}</td>
       <td>${b.preco != null ? ("R$ " + Number(b.preco).toFixed(2)) : ""}</td>
       <td>
         <button class="btn btn-sm btn-outline-primary me-1" onclick="promptPrice(${b.id})">Editar Preço</button>
@@ -121,19 +123,37 @@ function escapeHtml(s){ return (s||"").replaceAll("&","&amp;").replaceAll("<","&
 
 document.getElementById("form-add").addEventListener("submit", async (e)=>{
   e.preventDefault();
-  const titulo = document.getElementById("titulo").value.trim();
-  const autor = document.getElementById("autor").value.trim();
+  // 1. Coleta os valores dos inputs (o ID do input foi mantido, mas as variáveis são claras)
+  const title = document.getElementById("title").value.trim();
+  const author = document.getElementById("author").value.trim();
+  const book_id = document.getElementById("book_id").value.trim(); // NOVO
+  const isbn = document.getElementById("isbn").value.trim();       // NOVO
   const ano = document.getElementById("ano").value.trim();
   const preco = document.getElementById("preco").value.trim();
-  const body = { titulo, autor, ano_publicacao: ano || null, preco: preco || null };
-  const res = await fetch(api.add, { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+
+  // 2. Monta o corpo JSON com as chaves corretas para o backend (title, author, book_id, isbn)
+  const body = { 
+    title, 
+    author, 
+    book_id, 
+    isbn, 
+    ano_publicacao: ano || null, 
+    preco: preco || null 
+  };
+  
+  const res = await fetch(api.add, { 
+    method: "POST", 
+    headers:{"Content-Type":"application/json"}, 
+    body: JSON.stringify(body) 
+  });
+  
   if(res.ok){
     showMsg("Livro adicionado com sucesso", "success");
     document.getElementById("form-add").reset();
     fetchBooks();
   } else {
     const j = await res.json();
-    showMsg(j.error || "Erro", "danger");
+    showMsg(j.error || "Erro ao adicionar livro. Verifique Book ID e ISBN.", "danger");
   }
 });
 

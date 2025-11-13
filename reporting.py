@@ -1,6 +1,4 @@
 # reporting.py (Novo Módulo, focado em Relatórios)
-
-from crud import listar_livros
 from config import REPORTLAB_AVAILABLE
 import os
 import io
@@ -17,6 +15,7 @@ if REPORTLAB_AVAILABLE:
 # ---------------- HTML Report (Exemplo) ----------------
 
 def generate_html_report():
+    from crud import listar_livros
     """Gera um relatório HTML simples de todos os livros."""
     books = listar_livros() # Obtém os dados
     
@@ -42,6 +41,7 @@ def generate_html_report():
 # ---------------- PDF Report (Exemplo) ----------------
 
 def generate_pdf_report():
+    from crud import listar_livros
     """Gera um relatório PDF formatado usando ReportLab."""
     if not REPORTLAB_AVAILABLE:
         raise ImportError("ReportLab não está instalado. Não é possível gerar PDF.")

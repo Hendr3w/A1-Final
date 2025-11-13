@@ -1,5 +1,4 @@
 from config import get_connection, BACKUP_DIR, DB_FILE, BACKUP_PREFIX, MAX_BACKUPS_TO_KEEP, validar_ano, validar_preco, init_db
-from crud import listar_livros  # Necessário para exportar o CSV
 import shutil
 import time
 from datetime import datetime
@@ -39,6 +38,7 @@ def detect_delimiter(sample_line):
 
 
 def export_csv_to_memory():
+    from crud import listar_livros
     rows = listar_livros()
     output = io.StringIO()
     writer = csv.writer(output)
