@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Pré-visualização do Dataset</h2>
+
+<div class="d-flex gap-3 mb-4">
+
+    <a class="btn btn-warning" href="/analyze?file={{ filename }}">
+        📊 Análise de Dados
+    </a>
+
+
+    <a class="btn btn-success" href="/ml?file={{ filename }}">
+        🤖 Machine Learning
+    </a>
+
+</div>
+
+<div class="mt-4">
+    {{ table|safe }}
+</div>
+
+{% endblock %}

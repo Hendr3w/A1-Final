@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Análise Exploratória Automática</h2>
+
+<p>Arquivo analisado: <strong>{{ filename }}</strong></p>
+
+{% for p in plots %}
+    <div class="mt-4">
+        <img src="/{{ p }}" class="img-fluid">
+    </div>
+{% endfor %}
+
+<a class="btn btn-success mt-4" href="/predict?file={{ filename }}">
+    Ir para Machine Learning
+</a>
+
+{% endblock %}

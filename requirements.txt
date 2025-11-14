@@ -1,8 +1,7 @@
+flask
 pandas
 numpy
 matplotlib
-scikit-learn
-prophet
 seaborn
-flask
-reportlab
+scikit-learn
+plotly

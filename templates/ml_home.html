@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>🤖 Machine Learning</h2>
+
+<p class="text-muted">
+    Escolha uma ação de Machine Learning usando o dataset carregado.
+</p>
+
+{% if filename %}
+    <p><b>Dataset ativo:</b> {{ filename }}</p>
+{% else %}
+    <p class="text-danger"><b>Nenhum dataset selecionado!</b></p>
+{% endif %}
+
+<div class="mt-4 d-flex flex-column gap-3">
+
+    <a class="btn btn-primary"
+       href="/train_price?file={{ filename }}&model=rf">
+        💲 Treinar Modelo de Preço (Random Forest)
+    </a>
+
+    <a class="btn btn-secondary"
+       href="/train_price?file={{ filename }}&model=lr">
+        💲 Treinar Modelo de Preço (Linear Regression)
+    </a>
+
+    <a class="btn btn-success"
+       href="/predict_price?file={{ filename }}">
+        🔮 Prever Preço
+    </a>
+
+    <a class="btn btn-outline-dark" href="/preview?file={{ filename }}">
+        ⬅ Voltar ao Dataset
+    </a>
+</div>
+
+{% endblock %}

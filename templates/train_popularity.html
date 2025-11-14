@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Treinamento - Popularidade</h2>
+
+<p>Arquivo: <strong>{{ filename }}</strong></p>
+
+<h3>Métrica usada para segmentação: {{ metrics.used_metric }}</h3>
+<p>Exemplos usados: {{ metrics.n_samples }}</p>
+
+<h4>Logistic Regression</h4>
+<p>Accuracy: {{ metrics.logistic.accuracy | round(4) }}</p>
+<pre>{{ metrics.logistic.report | tojson(indent=2) }}</pre>
+
+<h4>Random Forest</h4>
+<p>Accuracy: {{ metrics.random_forest.accuracy | round(4) }}</p>
+<pre>{{ metrics.random_forest.report | tojson(indent=2) }}</pre>
+
+<a class="btn btn-primary mt-3" href="/predict_popularity?file={{ filename }}">Ir para predição</a>
+{% endblock %}

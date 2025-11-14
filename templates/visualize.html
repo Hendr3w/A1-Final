@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Visualizações</h2>
+
+{% if not plot_path %}
+<form method="POST">
+
+    <input type="hidden" name="file" value="{{ file }}">
+
+    <label>Selecione a coluna:</label>
+    <select class="form-select" name="column">
+        {% for c in columns %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+    </select>
+
+    <button class="btn btn-primary mt-3" type="submit">Gerar gráfico</button>
+</form>
+
+{% else %}
+
+<img src="/{{ plot_path }}" class="img-fluid">
+
+{% endif %}
+
+{% endblock %}

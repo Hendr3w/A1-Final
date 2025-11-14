@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Resultado da Previsão</h2>
+
+<p>Preço sugerido: <strong>${{ price|round(2) }}</strong></p>
+
+<h4 class="mt-4">Valores de entrada</h4>
+<ul>
+    {% for k,v in input.items() %}
+    <li>{{ k }}: {{ v }}</li>
+    {% endfor %}
+</ul>
+
+<a class="btn btn-primary mt-3" href="/predict_price?file={{ filename }}">Nova previsão</a>
+
+{% endblock %}
