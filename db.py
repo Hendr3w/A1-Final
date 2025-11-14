@@ -82,3 +82,32 @@ def buscar_por_autor(autor_query):
         cur.execute(
             "SELECT id, titulo, autor, ano_publicacao, preco FROM livros WHERE autor LIKE ? ORDER BY id", (like,))
         return [dict(row) for row in cur.fetchall()]
+
+
+def adicionar_livro(titulo, autor, ano_publicacao, preco):
+    backup_db()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
+                    (titulo.strip(), autor.strip(), ano_publicacao, preco))
+        conn.commit()
+        return cur.lastrowid
+
+
+def remover_livro(livro_id):
+    backup_db()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM livros WHERE id = ?", (livro_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def atualizar_preco_livro(livro_id, novo_preco):
+    backup_db()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE livros SET preco = ? WHERE id = ?",
+                    (novo_preco, livro_id))
+        conn.commit()
+        return cur.rowcount > 0

@@ -39,35 +39,6 @@ def validar_preco(preco_str):
     return None
 
 
-def adicionar_livro(titulo, autor, ano_publicacao, preco):
-    db.backup_db()
-    with db.get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
-                    (titulo.strip(), autor.strip(), ano_publicacao, preco))
-        conn.commit()
-        return cur.lastrowid
-
-
-def atualizar_preco_livro(livro_id, novo_preco):
-    db.backup_db()
-    with db.get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute("UPDATE livros SET preco = ? WHERE id = ?",
-                    (novo_preco, livro_id))
-        conn.commit()
-        return cur.rowcount > 0
-
-
-def remover_livro(livro_id):
-    db.backup_db()
-    with db.get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM livros WHERE id = ?", (livro_id,))
-        conn.commit()
-        return cur.rowcount > 0
-
-
 def exportar_para_csv():
     """Exporta os dados da tabela para CSV em memória e retorna um stream binário (BytesIO)."""
     livros = db.listar_livros()
@@ -258,7 +229,7 @@ def api_books():
             return jsonify({"error": "Preço inválido (deve ser um número não negativo)"}), 400
 
         try:
-            livro_id = adicionar_livro(titulo, autor, ano, preco)
+            livro_id = db.adicionar_livro(titulo, autor, ano, preco)
             return jsonify({"success": True, "id": livro_id}), 201
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -266,7 +237,7 @@ def api_books():
 
 @app.route("/api/books/<int:book_id>", methods=["DELETE"])
 def api_delete_book(book_id):
-    if remover_livro(book_id):
+    if db.remover_livro(book_id):
         return jsonify({"success": True})
     return jsonify({"error": "Livro não encontrado"}), 404
 
@@ -280,7 +251,7 @@ def api_update_price(book_id):
     if novo_preco is None:
         return jsonify({"error": "Preço inválido"}), 400
 
-    if atualizar_preco_livro(book_id, novo_preco):
+    if db.atualizar_preco_livro(book_id, novo_preco):
         return jsonify({"success": True})
     return jsonify({"error": "Livro não encontrado"}), 404
 
