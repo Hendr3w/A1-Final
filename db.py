@@ -63,3 +63,22 @@ def prune_old_backups():
             old.unlink()
         except Exception:
             pass
+
+
+def listar_livros():
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, titulo, autor, ano_publicacao, preco FROM livros ORDER BY id")
+        return [dict(row) for row in cur.fetchall()]
+
+
+def buscar_por_autor(autor_query):
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        like = f"%{autor_query.strip()}%"
+        cur.execute(
+            "SELECT id, titulo, autor, ano_publicacao, preco FROM livros WHERE autor LIKE ? ORDER BY id", (like,))
+        return [dict(row) for row in cur.fetchall()]

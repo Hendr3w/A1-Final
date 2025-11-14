@@ -1,6 +1,4 @@
-import sqlite3
 import csv
-from pathlib import Path
 from datetime import datetime
 from io import StringIO, BytesIO
 from flask import Flask, request, jsonify, send_file, render_template
@@ -51,15 +49,6 @@ def adicionar_livro(titulo, autor, ano_publicacao, preco):
         return cur.lastrowid
 
 
-def listar_livros():
-    with db.get_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT id, titulo, autor, ano_publicacao, preco FROM livros ORDER BY id")
-        return [dict(row) for row in cur.fetchall()]
-
-
 def atualizar_preco_livro(livro_id, novo_preco):
     db.backup_db()
     with db.get_connection() as conn:
@@ -79,19 +68,9 @@ def remover_livro(livro_id):
         return cur.rowcount > 0
 
 
-def buscar_por_autor(autor_query):
-    with db.get_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{autor_query.strip()}%"
-        cur.execute(
-            "SELECT id, titulo, autor, ano_publicacao, preco FROM livros WHERE autor LIKE ? ORDER BY id", (like,))
-        return [dict(row) for row in cur.fetchall()]
-
-
 def exportar_para_csv():
     """Exporta os dados da tabela para CSV em memória e retorna um stream binário (BytesIO)."""
-    livros = listar_livros()
+    livros = db.listar_livros()
     si = StringIO()  # Usamos StringIO para escrever o CSV como texto
     writer = csv.writer(si)
     writer.writerow(["id", "titulo", "autor", "ano_publicacao", "preco"])
@@ -144,7 +123,7 @@ def gerar_relatorio_html():
     """
     Gera o relatório HTML em memória e converte o conteúdo de texto para BytesIO.
     """
-    livros = listar_livros()
+    livros = db.listar_livros()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     html_content = [
@@ -180,7 +159,7 @@ def gerar_relatorio_html():
 
 
 def gerar_relatorio_pdf():
-    livros = listar_livros()
+    livros = db.listar_livros()
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     styles = getSampleStyleSheet()
@@ -246,9 +225,6 @@ def gerar_relatorio_pdf():
 
 db.init_db()
 
-# ==========================================================
-# APLICAÇÃO FLASK E ROTAS DA API
-# ==========================================================
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 
@@ -260,7 +236,7 @@ def index():
 @app.route("/api/books", methods=["GET", "POST"])
 def api_books():
     if request.method == "GET":
-        livros = listar_livros()
+        livros = db.listar_livros()
         return jsonify(livros)
 
     elif request.method == "POST":
@@ -313,9 +289,9 @@ def api_update_price(book_id):
 def api_search():
     query = request.args.get("q", "")
     if not query:
-        return jsonify(listar_livros())
+        return jsonify(db.listar_livros())
 
-    resultados = buscar_por_autor(query)
+    resultados = db.buscar_por_autor(query)
     return jsonify(resultados)
 
 
