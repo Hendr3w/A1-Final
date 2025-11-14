@@ -241,6 +241,13 @@ def api_delete_book(book_id):
     return jsonify({"error": "Livro não encontrado"}), 404
 
 
+@app.route("/api/books", methods=["DELETE"])
+def api_delete_all_books():
+    if db.remover_todos_livros():
+        return jsonify({"success": True})
+    return jsonify({"error": "Falha ao deletar todos os livros"}), 500
+
+
 @app.route("/api/books/<int:book_id>/price", methods=["PUT"])
 def api_update_price(book_id):
     data = request.json

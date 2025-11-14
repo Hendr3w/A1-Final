@@ -110,4 +110,12 @@ def atualizar_preco_livro(livro_id, novo_preco):
         cur.execute("UPDATE livros SET preco = ? WHERE id = ?",
                     (novo_preco, livro_id))
         conn.commit()
+
+
+def remover_todos_livros():
+    backup_db()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM livros")
+        conn.commit()
         return cur.rowcount > 0
