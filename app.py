@@ -14,14 +14,6 @@ from reportlab.lib.units import inch
 
 import db
 
-ROOT = Path.cwd() / "meu_sistema_livraria"
-DATA_DIR = ROOT / "data"
-BACKUP_DIR = ROOT / "backups"
-EXPORT_DIR = ROOT / "exports"
-DB_FILE = DATA_DIR / "livraria.db"
-BACKUP_PREFIX = "backup_livraria_"
-MAX_BACKUPS_TO_KEEP = 5
-
 
 def validar_ano(ano_str):
     try:
