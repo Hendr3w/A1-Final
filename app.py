@@ -83,8 +83,7 @@ def importar_de_csv_from_memory(file_storage):
             ano = validar_ano(ano_raw.strip())
             preco = validar_preco(preco_raw.strip())
 
-            cur.execute("INSERT INTO livros (titulo, autor, ano_publicacao, preco) VALUES (?, ?, ?, ?)",
-                        (titulo.strip(), autor.strip(), ano, preco))
+            db.adicionar_livro(titulo.strip(), autor.strip(), ano, preco)
             inserted += 1
         conn.commit()
     return inserted
